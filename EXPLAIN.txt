@@ -1,0 +1,6 @@
+Method	Siapa yang menerima?
+io.emit()	                        Semua user, termasuk pengirim
+socket.emit()	                    Hanya pengirim
+socket.broadcast.emit()	            Semua kecuali pengirim
+io.to(room).emit()	                Semua user dalam room tertentu
+socket.broadcast.to(room).emit()	Semua user dalam room tertentu kecuali pengirim

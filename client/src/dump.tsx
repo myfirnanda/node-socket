@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import './App.css'
 import io from 'socket.io-client'
 import { users } from './utils/users.js';
-import type { User } from './utils/users.d';
-import type { ChatMessage } from './utils/chatMessages.d';
+import type { User } from './utils/users.js';
 
 const socket = io("http://localhost:8000");
+
+interface ChatMessage {
+  email: string;
+  message: string;
+  sender?: string;
+}
 
 const getRandomLoggedInUser = (): User => {
   const randomIndex = Math.floor(Math.random() * users.length);
@@ -14,25 +19,19 @@ const getRandomLoggedInUser = (): User => {
 };
 
 function App() {
-  const [email, setEmail] = useState("all");
+  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState<ChatMessage[]>([]);
-  // const [unread, setUnread] = useState(0);
+  const [unread, setUnread] = useState(0);
   const [loggedInUser] = useState<User>(getRandomLoggedInUser);
 
   const sendMessage = () => {
     if (message.trim() && email) {
-      const recipient = users.find(user => user.email === email)
-
       const chatMessage: ChatMessage = {
-        name: loggedInUser.name,
         email: loggedInUser.email,
-        message,
-        recipientId: email === 'all' ? 'all' : recipient?.id,
-        recipientName: email === 'all' ? 'All' : recipient?.name || 'Unknown',
-        recipientEmail: email,
-      }
-
+        message: message
+      };
+      
       socket.emit("send_message", chatMessage);
       setChat(prev => [...prev, chatMessage]);
       setMessage("");
@@ -40,18 +39,17 @@ function App() {
   };
 
   useEffect(() => {
-    socket.on("receive_message", (data: ChatMessage) => { 
+    socket.on("receive_message", (data: ChatMessage) => {
       setChat(prev => [...prev, data]);
+
+      if (!document.hasFocus()) {
+        setUnread(prev => prev + 1);
+      }
     });
 
     return () => { socket.off("receive_message"); };
-  }, [loggedInUser.email]);
+  }, []);
 
-  useEffect(() => {
-    socket.emit("login", loggedInUser.id);
-  }, [loggedInUser.id]);
-
-  /*
   useEffect(() => {
     const handleFocus = () => setUnread(0);
     window.addEventListener("focus", handleFocus);
@@ -68,29 +66,21 @@ function App() {
       document.title = "Chat App";
     }
   }, [unread]);
-  */
 
   return (
     <div className="App my-16">
-      {/* USER LOGIN PROFILE */}
-      <div id="profile" className='text-center mb-8'>
-        <p>Login as:</p>
-        <div className="flex items-center justify-center gap-3 mt-3">
-          <img src="/profile.png" alt="Profile Icon" className="w-12 h-12" />
-          <h3 className='font-semibold text-4xl'>{loggedInUser.name}</h3>
-        </div>
+      <div id="profile" className='text-center text-4xl mb-14'>
+        <p>Login as <span className='font-semibold'>{loggedInUser.name}</span></p>
       </div>
-
-      {/* MESSAGE FORM */}
       <form className='flex flex-col items-center gap-4 max-w-sm mx-auto'>
-        <label htmlFor="recipientEmail" className="block w-full text-start font-medium text-heading">Message to:</label>
+        <label htmlFor="receiver" className="block w-full text-start font-medium text-heading">Message to:</label>
         <select 
-          id="recipientEmail" 
+          id="receiver" 
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="block w-full px-3 py-2.5 bg-neutral-secondary-medium border border-default-medium text-heading text-sm rounded-base focus:ring-brand focus:border-brand shadow-xs placeholder:text-body"
         >
-          <option key="x-1234" value="all" className="bg-neutral-secondary-medium text-heading">All</option>
+          <option value="" className="bg-neutral-secondary-medium text-heading" disabled>Pilih Penerima</option>
           {users
             .filter(user => user.id !== loggedInUser.id)
             .map(data => (
@@ -105,51 +95,30 @@ function App() {
           placeholder="Write your message here..." 
           onChange={e => setMessage(e.target.value)}
         />
-        <button 
-          type="button" 
-          onClick={sendMessage} 
-          className="w-full bg-brand text-gray-900 dark:text-white py-2.5 rounded-base hover:bg-brand/90 transition-colors font-medium shadow-sm"
-        >
-          Send Message
-        </button>
+        <button type="button" onClick={sendMessage} className="w-full bg-brand text-white py-2.5 rounded-base hover:bg-brand/90 transition-colors">Send Message</button>
       </form>
-      
-      {/* CHATBOX */}
-      <div id="chatbox" className='max-w-sm mx-auto mt-8 border border-default-medium rounded-base p-4 bg-neutral-secondary-medium shadow-sm'>
-        <h4 className='text-heading font-semibold mb-4'>Messages:</h4>
-        <ul className='space-y-3 flex flex-col'>
+      <div id="chatbox" className='max-w-sm mx-auto mt-8 border border-default-medium rounded-base p-4 bg-neutral-secondary-medium'>
+        <h4 className='text-heading font-semibold'>Messages:</h4>
+        <ul className='space-y-2 flex flex-col'>
           {chat.map((data, index) => {
             const isCurrentUser = data.email === loggedInUser.email;
             
-            const prevMessage = index > 0 ? chat[index - 1] : null;
-            const isSameSenderAsPrevious = prevMessage && prevMessage.email === data.email && prevMessage.recipientEmail === data.recipientEmail;
-
             if (isCurrentUser) {
               return (
                 <li key={index} className='flex flex-col items-end gap-1'>
-                  {!isSameSenderAsPrevious && (
-                    <span className='text-xs text-body'>
-                      You {data.recipientEmail !== 'all' && `to ${data.recipientName}`}
-                    </span>
-                  )}
-                  <div className='bg-blue-500 dark:bg-blue-600 rounded-lg text-white px-3 py-2 max-w-[70%] shadow-sm'>
-                    {data.message}
-                  </div>
+                  <span className='text-xs text-body mt-4'>You</span>
+                  <div className='bg-blue-400 rounded-lg text-white px-3 py-2 max-w-[70%]'>{data.message}</div>
                 </li>
-              )
+              );
             } else {
               return (
                 <li key={index} className='flex flex-col items-start gap-1'>
-                  {!isSameSenderAsPrevious && (
-                    <span className='text-xs text-body'>{data.name}</span>
-                  )}
-                  <div className='bg-gray-200 dark:bg-gray-600 rounded-lg text-gray-900 dark:text-white px-3 py-2 max-w-[70%] shadow-sm'>
-                    {data.message}
-                  </div>
+                  <span className='text-xs text-body mt-4'>{users.find(u => u.email === data.email)?.name || 'Unknown'}</span>
+                  <div className='bg-neutral-secondary-light text-heading px-3 py-2 rounded-lg max-w-[70%]'>{data.message}</div>
                 </li>
-              )
+              );
             }
-        })}
+          })}
         </ul>
       </div>
     </div>
